@@ -1,0 +1,26 @@
+# API framework
+fastapi==0.135.2
+uvicorn[standard]==0.42.0     # [standard] includes uvloop + httptools for better performance
+
+# Database
+sqlalchemy==2.0.35             # async ORM
+asyncpg==0.29.0                # async postgres driver (used by sqlalchemy at runtime)
+psycopg2-binary==2.9.9         # sync driver — needed by alembic for migrations
+pgvector==0.3.5                # pgvector SQLAlchemy integration
+
+# Migrations
+alembic==1.13.3
+
+# Embeddings (local — no API cost)
+sentence-transformers==3.1.1   # downloads all-MiniLM-L6-v2 at build time
+
+# HTTP client
+httpx==0.27.2
+
+# Gemini LLM
+google-genai>=1.0.0
+
+# Config & validation
+pydantic==2.9.2
+pydantic-settings==2.5.2
+python-dotenv==1.0.1
