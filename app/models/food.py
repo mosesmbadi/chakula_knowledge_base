@@ -50,7 +50,7 @@ class Food(Base):
 
     # Status
     status: Mapped[FoodStatus] = mapped_column(
-        Enum(FoodStatus), default=FoodStatus.draft, nullable=False
+        Enum(FoodStatus, schema='foods_knowldgebase'), default=FoodStatus.draft, nullable=False
     )
 
     # pgvector embedding (populated on approval)

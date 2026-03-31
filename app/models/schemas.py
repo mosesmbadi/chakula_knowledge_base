@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 class GenerateFoodsRequest(BaseModel):
     region: str = Field(..., description="Region to generate foods for, e.g. 'Coast Kenya'")
-    count: int = Field(default=5, ge=1, le=100, description="Number of foods to generate")
+    count: int = Field(default=5, ge=1, le=250, description="Number of foods to generate")
 
 
 class FoodOut(BaseModel):

@@ -34,12 +34,12 @@ Important rules:
 - Focus on foods actually eaten by ordinary people, not just restaurants
 - Be culturally accurate: e.g. for Kenya, breakfast foods include mandazi, chai, uji, mkate, maandazi — NOT ugali or matooke which are lunch/dinner staples
 - Return ONLY a valid JSON array, no explanation or markdown fences
-
+{exclude_section}
 Region: {region}
 Count: {count}"""
 
 
-BATCH_SIZE = 10  # max foods per LLM call — keeps responses fast and parseable
+BATCH_SIZE = 50  # max foods per LLM call
 MAX_RETRIES = 3  # retry on bad JSON from the LLM
 
 
@@ -47,9 +47,14 @@ def _get_client() -> genai.Client:
     return genai.Client(api_key=settings.GEMINI_API_KEY)
 
 
-async def _generate_batch(client: genai.Client, region: str, count: int) -> list[dict]:
+async def _generate_batch(client: genai.Client, region: str, count: int, exclude_names: list[str] | None = None) -> list[dict]:
     """Single Gemini call for up to BATCH_SIZE foods. Retries on parse failure."""
-    prompt = GENERATION_PROMPT.format(region=region, count=count)
+    if exclude_names:
+        names_list = "\n".join(f"  - {n}" for n in exclude_names)
+        exclude_section = f"\nDo NOT generate any of these already-generated foods:\n{names_list}\n"
+    else:
+        exclude_section = ""
+    prompt = GENERATION_PROMPT.format(region=region, count=count, exclude_section=exclude_section)
     config = types.GenerateContentConfig(
         temperature=0.4,
         top_p=0.9,
@@ -78,16 +83,19 @@ async def _generate_batch(client: genai.Client, region: str, count: int) -> list
 async def generate_foods_from_llm(region: str, count: int) -> list[dict]:
     """
     Call the Gemini API and parse the structured food list it returns.
-    Large counts are split into batches.
+    Large counts are split into batches, with each batch told to avoid
+    names already generated in previous batches.
     """
     client = _get_client()
     all_foods: list[dict] = []
+    generated_names: list[str] = []
 
     remaining = count
     while remaining > 0:
         batch = min(remaining, BATCH_SIZE)
-        foods = await _generate_batch(client, region, batch)
+        foods = await _generate_batch(client, region, batch, exclude_names=generated_names or None)
         all_foods.extend(foods)
+        generated_names.extend(f["name"] for f in foods if "name" in f)
         remaining -= batch
 
     return all_foods

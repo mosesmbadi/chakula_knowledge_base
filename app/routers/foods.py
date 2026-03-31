@@ -2,7 +2,7 @@ import re
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, cast, or_
+from sqlalchemy import select, func, cast, or_, and_
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.db.database import get_db
@@ -36,7 +36,7 @@ def normalize_region(region: str) -> str:
 @router.post("/generate", response_model=GenerateResponse, status_code=201)
 async def generate_foods(payload: GenerateFoodsRequest, db: AsyncSession = Depends(get_db)):
     """
-    Call the local LLM to generate food entries for a given region.
+    Call the local GEMINI to generate food entries for a given region.
     All entries are saved as DRAFT — they need human approval before going live.
     """
     raw_foods = await generate_foods_from_llm(payload.region, payload.count)
@@ -163,34 +163,40 @@ async def approve_all_drafts(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Approve all draft food entries at once.
-    Generates embeddings for each and sets status to verified.
+    Approve all draft food entries at once, and embed any verified foods that
+    are missing embeddings (e.g. seeded directly into the DB).
     Optionally filter by region.
     """
-    stmt = select(Food).where(Food.status == FoodStatus.draft)
+    stmt = select(Food).where(
+        or_(
+            Food.status == FoodStatus.draft,
+            and_(Food.status == FoodStatus.verified, Food.embedding.is_(None)),
+        )
+    )
     if region:
         stmt = stmt.where(Food.region_normalized == normalize_region(region))
 
     result = await db.execute(stmt)
-    drafts = result.scalars().all()
+    pending = result.scalars().all()
 
-    if not drafts:
-        raise HTTPException(status_code=404, detail="No drafts found to approve")
+    if not pending:
+        raise HTTPException(status_code=404, detail="No foods to approve or embed")
 
     now = datetime.utcnow()
-    for food in drafts:
+    for food in pending:
         food.embedding = embed_food(food)
-        food.status = FoodStatus.verified
-        food.approved_at = now
+        if food.status == FoodStatus.draft:
+            food.status = FoodStatus.verified
+            food.approved_at = now
 
     await db.commit()
-    for food in drafts:
+    for food in pending:
         await db.refresh(food)
 
     return BulkApproveResponse(
-        message=f"Approved {len(drafts)} foods.",
-        approved=len(drafts),
-        foods=[FoodOut.model_validate(f) for f in drafts],
+        message=f"Approved/embedded {len(pending)} foods.",
+        approved=len(pending),
+        foods=[FoodOut.model_validate(f) for f in pending],
     )
 
 
