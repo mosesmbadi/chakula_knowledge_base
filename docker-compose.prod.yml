@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  api:
+    image: ${DOCKERHUB_USERNAME}/chakula_knowledge_base:${IMAGE_TAG:-latest}
+    container_name: chakula_food_generator
+    restart: always
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      EMBEDDING_MODEL: all-MiniLM-L6-v2
+      CHAKULA_API_KEY: ${CHAKULA_API_KEY}
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - chakula_network
+    # Optional: Add resource limits for production
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+
+networks:
+  chakula_network:
+    driver: bridge

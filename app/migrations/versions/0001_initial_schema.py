@@ -14,19 +14,19 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.execute("CREATE SCHEMA IF NOT EXISTS foods_knowldgebase")
+    op.execute("CREATE SCHEMA IF NOT EXISTS foods_knowledgebase")
     op.execute("CREATE EXTENSION IF NOT EXISTS vector")
     op.execute(
         """
         DO $$ BEGIN
-            CREATE TYPE foods_knowldgebase.foodstatus AS ENUM ('draft', 'verified', 'rejected');
+            CREATE TYPE foods_knowledgebase.foodstatus AS ENUM ('draft', 'verified', 'rejected');
         EXCEPTION WHEN duplicate_object THEN null;
         END $$;
         """
     )
     op.execute(
         """
-        CREATE TABLE IF NOT EXISTS foods_knowldgebase.foods (
+        CREATE TABLE IF NOT EXISTS foods_knowledgebase.foods (
             id          VARCHAR(36) PRIMARY KEY,
             name        VARCHAR(200) NOT NULL,
             local_names JSONB        NOT NULL DEFAULT '[]',
@@ -43,7 +43,7 @@ def upgrade() -> None:
             vegetables  VARCHAR(10),
             sub_regions JSONB NOT NULL DEFAULT '[]',
             tags        JSONB NOT NULL DEFAULT '[]',
-            status      foods_knowldgebase.foodstatus NOT NULL DEFAULT 'draft',
+            status      foods_knowledgebase.foodstatus NOT NULL DEFAULT 'draft',
             embedding   vector(384),
             created_at  TIMESTAMP NOT NULL DEFAULT NOW(),
             approved_at TIMESTAMP
@@ -53,6 +53,6 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("DROP TABLE IF EXISTS foods_knowldgebase.foods")
-    op.execute("DROP TYPE IF EXISTS foods_knowldgebase.foodstatus")
-    op.execute("DROP SCHEMA IF EXISTS foods_knowldgebase CASCADE")
+    op.execute("DROP TABLE IF EXISTS foods_knowledgebase.foods")
+    op.execute("DROP TYPE IF EXISTS foods_knowledgebase.foodstatus")
+    op.execute("DROP SCHEMA IF EXISTS foods_knowledgebase CASCADE")

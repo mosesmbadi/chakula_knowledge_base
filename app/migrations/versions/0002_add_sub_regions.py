@@ -16,7 +16,7 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.execute(
         """
-        ALTER TABLE foods_knowldgebase.foods
+        ALTER TABLE foods_knowledgebase.foods
         ADD COLUMN IF NOT EXISTS sub_regions JSONB NOT NULL DEFAULT '[]'
         """
     )
@@ -24,5 +24,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.execute(
-        "ALTER TABLE foods_knowldgebase.foods DROP COLUMN IF EXISTS sub_regions"
+        "ALTER TABLE foods_knowledgebase.foods DROP COLUMN IF EXISTS sub_regions"
     )

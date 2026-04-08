@@ -9,7 +9,7 @@ async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit
 
 class Base(DeclarativeBase):
     __abstract__ = True
-    __table_args__ = {'schema': 'foods_knowldgebase'}
+    __table_args__ = {'schema': 'foods_knowledgebase'}
 
 
 async def get_db():

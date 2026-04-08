@@ -19,6 +19,8 @@ RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTr
 
 COPY . ./app
 
+RUN chmod +x /app/app/entrypoint.sh
+
 EXPOSE 8000
 
 CMD ["sh", "-c", "cd /app/app && alembic upgrade head && cd /app && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
