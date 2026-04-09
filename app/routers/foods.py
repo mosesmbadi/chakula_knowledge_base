@@ -94,11 +94,14 @@ async def _save_food_entries(region: str, entries: list[dict] | list[FoodPayload
 @generation_router.post("/generate", response_model=GenerateResponse, status_code=201)
 async def generate_foods(payload: GenerateFoodsRequest, db: AsyncSession = Depends(get_db)):
     """
-    Call the local GEMINI to generate food entries for a given region.
-    All entries are saved as DRAFT — they need human approval before going live.
+    Generate food entries for a given region with Gemini, or store manually uploaded foods.
+    All entries are saved as DRAFT so they need human approval before going live.
     """
+    if payload.foods is not None:
+        return await _save_food_entries(payload.region, payload.foods, db)
+
     try:
-        raw_foods = await generate_foods_from_llm(payload.region, payload.count)
+        raw_foods = await generate_foods_from_llm(payload.region, payload.count or 0)
     except GeminiServiceUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return await _save_food_entries(payload.region, raw_foods, db)

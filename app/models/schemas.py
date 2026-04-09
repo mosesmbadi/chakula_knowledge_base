@@ -1,16 +1,35 @@
 from datetime import datetime
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class GenerateFoodsRequest(BaseModel):
     region: str = Field(..., description="Region to generate foods for, e.g. 'Coast Kenya'")
-    count: int = Field(default=5, ge=1, le=250, description="Number of foods to generate")
+    count: int | None = Field(default=None, ge=1, le=250, description="Number of foods to generate")
+    foods: list["FoodPayload"] | None = Field(
+        default=None,
+        description="Optional list of manually uploaded foods. If provided, the request bypasses Gemini generation.",
+    )
+
+    @model_validator(mode="after")
+    def validate_source(self):
+        if self.foods is None and self.count is None:
+            raise ValueError("Either count or foods must be provided")
+        if self.foods is not None and self.count is not None:
+            raise ValueError("Provide only one of count or foods")
+        return self
 
 
 class FoodPayload(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     local_names: list[str] = Field(default_factory=list)
     description: str = Field(..., min_length=1)
+
+    @field_validator("local_names", mode="before")
+    @classmethod
+    def coerce_local_names(cls, v):
+        if isinstance(v, str):
+            return [v] if v else []
+        return v
     price_min_kes: float = Field(..., ge=0)
     price_max_kes: float = Field(..., ge=0)
     meal_type: list[str] = Field(default_factory=list)
