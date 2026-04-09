@@ -15,34 +15,26 @@ from app.models.schemas import (
     RejectResponse,
     DraftsResponse,
     FoodOut,
+    FoodPayload,
     RecommendRequest,
     RecommendResponse,
     RecommendedFood,
+    UploadFoodsRequest,
 )
-from app.services.llm_service import generate_foods_from_llm
+from app.services.llm_service import GeminiServiceUnavailableError, generate_foods_from_llm
 from app.services.embedding_service import embed_food, embed_query
 from app.auth import require_api_key
 
 router = APIRouter(prefix="/foods", tags=["foods"], dependencies=[Depends(require_api_key)])
+generation_router = APIRouter(prefix="/api/foods", tags=["foods"], dependencies=[Depends(require_api_key)])
 
 
 def normalize_region(region: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", region.lower()).strip("_")
 
 
-# ---------------------------------------------------------------------------
-# POST /foods/generate
-# ---------------------------------------------------------------------------
-@router.post("/generate", response_model=GenerateResponse, status_code=201)
-async def generate_foods(payload: GenerateFoodsRequest, db: AsyncSession = Depends(get_db)):
-    """
-    Call the local GEMINI to generate food entries for a given region.
-    All entries are saved as DRAFT — they need human approval before going live.
-    """
-    raw_foods = await generate_foods_from_llm(payload.region, payload.count)
-
-    # Fetch existing names for this region (any status) to avoid duplicates
-    region_normalized = normalize_region(payload.region)
+async def _save_food_entries(region: str, entries: list[dict] | list[FoodPayload], db: AsyncSession) -> GenerateResponse:
+    region_normalized = normalize_region(region)
     existing_result = await db.execute(
         select(func.lower(Food.name)).where(Food.region_normalized == region_normalized)
     )
@@ -50,32 +42,38 @@ async def generate_foods(payload: GenerateFoodsRequest, db: AsyncSession = Depen
 
     saved: list[Food] = []
 
-    for entry in raw_foods:
+    for entry in entries:
+        entry_data = entry.model_dump() if isinstance(entry, FoodPayload) else entry
+
         try:
-            if entry["name"].lower() in existing_names:
+            name = entry_data["name"].strip()
+            if not name:
                 continue
+            if name.lower() in existing_names:
+                continue
+
             food = Food(
-                name=entry["name"],
-                local_names=entry.get("local_names", []),
-                description=entry["description"],
-                region=payload.region,
+                name=name,
+                local_names=entry_data.get("local_names", []),
+                description=entry_data["description"],
+                region=region,
                 region_normalized=region_normalized,
-                price_min_kes=float(entry["price_min_kes"]),
-                price_max_kes=float(entry["price_max_kes"]),
-                meal_type=entry.get("meal_type", []),
-                ingredients=entry.get("ingredients", []),
-                common_at=entry.get("common_at", []),
-                protein=entry.get("protein"),
-                carbs=entry.get("carbs"),
-                vegetables=entry.get("vegetables"),
-                sub_regions=entry.get("sub_regions", []),
-                tags=entry.get("tags", []),
+                price_min_kes=float(entry_data["price_min_kes"]),
+                price_max_kes=float(entry_data["price_max_kes"]),
+                meal_type=entry_data.get("meal_type", []),
+                ingredients=entry_data.get("ingredients", []),
+                common_at=entry_data.get("common_at", []),
+                protein=entry_data.get("protein"),
+                carbs=entry_data.get("carbs"),
+                vegetables=entry_data.get("vegetables"),
+                sub_regions=entry_data.get("sub_regions", []),
+                tags=entry_data.get("tags", []),
                 status=FoodStatus.draft,
             )
             db.add(food)
             saved.append(food)
+            existing_names.add(name.lower())
         except (KeyError, ValueError, TypeError):
-            # Skip malformed entries — don't let one bad entry kill the whole batch
             continue
 
     await db.commit()
@@ -83,10 +81,37 @@ async def generate_foods(payload: GenerateFoodsRequest, db: AsyncSession = Depen
         await db.refresh(food)
 
     return GenerateResponse(
-        region=payload.region,
+        region=region,
         generated=len(saved),
-        foods=[FoodOut.model_validate(f) for f in saved],
+        foods=[FoodOut.model_validate(food) for food in saved],
     )
+
+
+# ---------------------------------------------------------------------------
+# POST /foods/generate
+# ---------------------------------------------------------------------------
+@router.post("/generate", response_model=GenerateResponse, status_code=201)
+@generation_router.post("/generate", response_model=GenerateResponse, status_code=201)
+async def generate_foods(payload: GenerateFoodsRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Call the local GEMINI to generate food entries for a given region.
+    All entries are saved as DRAFT — they need human approval before going live.
+    """
+    try:
+        raw_foods = await generate_foods_from_llm(payload.region, payload.count)
+    except GeminiServiceUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return await _save_food_entries(payload.region, raw_foods, db)
+
+
+@router.post("/generate/upload/", response_model=GenerateResponse, status_code=201)
+@generation_router.post("/generate/upload/", response_model=GenerateResponse, status_code=201)
+async def upload_foods(payload: UploadFoodsRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Store manually provided foods for a region.
+    Uploaded entries are saved as DRAFT so they follow the same approval flow as LLM-generated foods.
+    """
+    return await _save_food_entries(payload.region, payload.foods, db)
 
 
 # ---------------------------------------------------------------------------

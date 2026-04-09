@@ -1,7 +1,9 @@
+import asyncio
 import json
+import random
 import re
 from google import genai
-from google.genai import types
+from google.genai import errors as genai_errors, types
 from app.config import settings
 
 import logging
@@ -40,15 +42,50 @@ Count: {count}"""
 
 
 BATCH_SIZE = 50  # max foods per LLM call
-MAX_RETRIES = 3  # retry on bad JSON from the LLM
+
+
+class GeminiServiceUnavailableError(RuntimeError):
+    pass
 
 
 def _get_client() -> genai.Client:
     return genai.Client(api_key=settings.GEMINI_API_KEY)
 
 
-async def _generate_batch(client: genai.Client, region: str, count: int, exclude_names: list[str] | None = None) -> list[dict]:
-    """Single Gemini call for up to BATCH_SIZE foods. Retries on parse failure."""
+def _candidate_models() -> list[str]:
+    models = [settings.GEMINI_MODEL.strip()]
+    fallback_model = settings.GEMINI_FALLBACK_MODEL.strip()
+    if fallback_model and fallback_model not in models:
+        models.append(fallback_model)
+    return [model for model in models if model]
+
+
+def _api_error_status_code(exc: genai_errors.APIError) -> int | None:
+    return getattr(exc, "status_code", None) or getattr(exc, "code", None)
+
+
+def _is_retryable_api_error(exc: genai_errors.APIError) -> bool:
+    status_code = _api_error_status_code(exc)
+    return status_code in {429, 500, 502, 503, 504} or isinstance(exc, genai_errors.ServerError)
+
+
+def _retry_delay_seconds(attempt: int) -> float:
+    base_delay = max(settings.GEMINI_RETRY_BASE_DELAY_SECONDS, 0.0)
+    max_delay = max(settings.GEMINI_MAX_BACKOFF_SECONDS, base_delay or 1.0)
+    jitter = random.uniform(0.0, 0.25)
+    if base_delay == 0:
+        return jitter
+    return min(max_delay, (base_delay * (2 ** (attempt - 1))) + jitter)
+
+
+async def _generate_batch_for_model(
+    client: genai.Client,
+    model_name: str,
+    region: str,
+    count: int,
+    exclude_names: list[str] | None = None,
+) -> list[dict]:
+    """Single Gemini call for up to BATCH_SIZE foods. Retries transient API and parse failures."""
     if exclude_names:
         names_list = "\n".join(f"  - {n}" for n in exclude_names)
         exclude_section = f"\nDo NOT generate any of these already-generated foods:\n{names_list}\n"
@@ -61,23 +98,94 @@ async def _generate_batch(client: genai.Client, region: str, count: int, exclude
         response_mime_type="application/json",
     )
 
-    for attempt in range(1, MAX_RETRIES + 1):
-        response = await client.aio.models.generate_content(
-            model=settings.GEMINI_MODEL,
-            contents=prompt,
-            config=config,
-        )
-        raw = response.text
+    max_retries = max(settings.GEMINI_MAX_RETRIES, 1)
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            response = await client.aio.models.generate_content(
+                model=model_name,
+                contents=prompt,
+                config=config,
+            )
+        except genai_errors.APIError as exc:
+            if not _is_retryable_api_error(exc) or attempt == max_retries:
+                raise
+
+            delay = _retry_delay_seconds(attempt)
+            logger.warning(
+                "Gemini request failed for model %s (attempt %d/%d, status=%s): %s. Retrying in %.2fs",
+                model_name,
+                attempt,
+                max_retries,
+                _api_error_status_code(exc),
+                exc,
+                delay,
+            )
+            await asyncio.sleep(delay)
+            continue
+
+        raw = response.text or ""
 
         try:
             return _parse_llm_response(raw)
         except (json.JSONDecodeError, ValueError) as exc:
+            delay = _retry_delay_seconds(attempt)
             logger.warning(
-                "LLM JSON parse failed (attempt %d/%d): %s\nRaw (first 500 chars): %s",
-                attempt, MAX_RETRIES, exc, raw[:500],
+                "LLM JSON parse failed for model %s (attempt %d/%d): %s\nRaw (first 500 chars): %s",
+                model_name, attempt, max_retries, exc, raw[:500],
             )
-            if attempt == MAX_RETRIES:
+            if attempt == max_retries:
                 raise
+            await asyncio.sleep(delay)
+
+    raise RuntimeError("Gemini batch generation exited unexpectedly")
+
+
+async def _generate_batch(client: genai.Client, region: str, count: int, exclude_names: list[str] | None = None) -> list[dict]:
+    candidate_models = _candidate_models()
+    if not candidate_models:
+        raise RuntimeError("No Gemini model configured. Set GEMINI_MODEL in the environment.")
+
+    last_retryable_error: genai_errors.APIError | None = None
+    last_parse_error: Exception | None = None
+
+    for model_name in candidate_models:
+        try:
+            return await _generate_batch_for_model(
+                client=client,
+                model_name=model_name,
+                region=region,
+                count=count,
+                exclude_names=exclude_names,
+            )
+        except genai_errors.APIError as exc:
+            if not _is_retryable_api_error(exc):
+                raise
+
+            last_retryable_error = exc
+            logger.warning(
+                "Gemini model %s remained unavailable after %d attempts. Trying next model if configured.",
+                model_name,
+                max(settings.GEMINI_MAX_RETRIES, 1),
+            )
+        except (json.JSONDecodeError, ValueError) as exc:
+            last_parse_error = exc
+            logger.warning(
+                "Gemini model %s returned unusable JSON after %d attempts. Trying next model if configured.",
+                model_name,
+                max(settings.GEMINI_MAX_RETRIES, 1),
+            )
+
+    if last_retryable_error is not None:
+        model_list = ", ".join(candidate_models)
+        raise GeminiServiceUnavailableError(
+            f"Gemini is temporarily unavailable for configured model(s): {model_list}. Please retry shortly."
+        ) from last_retryable_error
+
+    if last_parse_error is not None:
+        raise ValueError("Gemini returned invalid JSON after exhausting all configured models.") from last_parse_error
+
+    raise RuntimeError("Gemini batch generation failed before any model attempt completed")
 
 
 async def generate_foods_from_llm(region: str, count: int) -> list[dict]:

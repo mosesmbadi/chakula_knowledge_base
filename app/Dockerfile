@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY app/requirements.txt .
+COPY requirements.txt .
 RUN pip install torch==2.4.1 --index-url https://download.pytorch.org/whl/cpu
 RUN pip install -r requirements.txt
 
@@ -17,7 +17,7 @@ RUN pip install -r requirements.txt
 # so the first approval request isn't slow
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
 
-COPY app/ ./app
+COPY . ./app
 
 RUN chmod +x /app/app/entrypoint.sh
 

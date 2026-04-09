@@ -106,6 +106,32 @@ POST /foods/generate
 ```
 Calls the local LLM, saves entries as **draft**.
 
+### Upload foods manually as JSON
+```
+POST /api/foods/generate/upload/
+{
+  "region": "Coast Kenya",
+  "foods": [
+    {
+      "name": "Mahamri",
+      "local_names": ["Mandazi ya nazi"],
+      "description": "A lightly sweet coconut dough fried until golden and commonly eaten with chai.",
+      "price_min_kes": 30,
+      "price_max_kes": 80,
+      "meal_type": ["breakfast", "snack"],
+      "ingredients": ["flour", "coconut milk", "cardamom", "yeast"],
+      "common_at": ["street stalls", "homes", "bakeries"],
+      "protein": "low",
+      "carbs": "high",
+      "vegetables": "low",
+      "sub_regions": ["Mombasa", "Kilifi", "Kwale"],
+      "tags": ["vegetarian", "halal"]
+    }
+  ]
+}
+```
+Stores the uploaded foods as **draft** entries, using the same dedupe and approval flow as LLM-generated foods.
+
 ---
 
 ### List drafts (review queue)

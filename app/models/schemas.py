@@ -1,10 +1,37 @@
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class GenerateFoodsRequest(BaseModel):
     region: str = Field(..., description="Region to generate foods for, e.g. 'Coast Kenya'")
     count: int = Field(default=5, ge=1, le=250, description="Number of foods to generate")
+
+
+class FoodPayload(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    local_names: list[str] = Field(default_factory=list)
+    description: str = Field(..., min_length=1)
+    price_min_kes: float = Field(..., ge=0)
+    price_max_kes: float = Field(..., ge=0)
+    meal_type: list[str] = Field(default_factory=list)
+    ingredients: list[str] = Field(default_factory=list)
+    common_at: list[str] = Field(default_factory=list)
+    protein: str | None = None
+    carbs: str | None = None
+    vegetables: str | None = None
+    sub_regions: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_price_range(self):
+        if self.price_max_kes < self.price_min_kes:
+            raise ValueError("price_max_kes must be greater than or equal to price_min_kes")
+        return self
+
+
+class UploadFoodsRequest(BaseModel):
+    region: str = Field(..., description="Region the uploaded foods belong to, e.g. 'Coast Kenya'")
+    foods: list[FoodPayload] = Field(..., min_length=1, description="Foods to store as draft records")
 
 
 class FoodOut(BaseModel):
