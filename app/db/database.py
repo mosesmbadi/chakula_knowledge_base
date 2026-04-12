@@ -9,7 +9,10 @@ engine = create_async_engine(
     pool_size=settings.PG_POOL_MAX,
     pool_pre_ping=True,   # test connection health before use
     pool_recycle=1800,    # recycle connections after 30 min (before server kills them)
-    connect_args={"statement_cache_size": 0},  # required when DB is behind PgBouncer
+    # PgBouncer (transaction/statement pool mode) does not support prepared statements.
+    # Disable both asyncpg's own cache and SQLAlchemy's per-connection wrapper cache.
+    connect_args={"statement_cache_size": 0},
+    prepared_statement_cache_size=0,
 )
 async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
