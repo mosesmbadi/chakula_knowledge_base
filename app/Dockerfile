@@ -14,13 +14,15 @@ RUN pip install torch==2.4.1 --index-url https://download.pytorch.org/whl/cpu
 RUN pip install -r requirements.txt
 
 # Pre-download the embedding model at build time
-# so the first approval request isn't slow
+# so the first request isn't slow
 RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
 
-COPY . ./app
-
-RUN chmod +x /app/app/entrypoint.sh
+# Copy app directory contents directly into WORKDIR so paths are:
+#   /app/alembic.ini          ← alembic finds its config here
+#   /app/app/                 ← Python package (app.main, app.config, …)
+#   /app/migrations/          ← alembic migration scripts
+COPY app/ .
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "cd /app/app && alembic upgrade head && cd /app && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
