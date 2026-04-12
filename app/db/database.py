@@ -6,6 +6,7 @@ from app.config import settings
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=False,
+    pool_size=settings.PG_POOL_MAX,
     pool_pre_ping=True,   # test connection health before use
     pool_recycle=1800,    # recycle connections after 30 min (before server kills them)
 )
