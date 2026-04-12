@@ -14,7 +14,7 @@ FastAPI service for generating, reviewing, and approving food entries into the C
 
 - [Docker](https://docs.docker.com/get-docker/) + Docker Compose
 
-That's it. Postgres, pgvector, Ollama, and the API all run in containers.
+That's it. Postgres, pgvector, and the API all run in containers.
 
 ---
 
@@ -26,8 +26,6 @@ docker compose up --build
 
 # On first run this will:
 #   - Pull the pgvector/postgres image
-#   - Pull the Ollama image
-#   - Download the llama3.2 model (~2GB — one time only, cached in a volume)
 #   - Build the FastAPI image (pre-downloads the embedding model)
 #   - Start all services
 ```
@@ -44,8 +42,6 @@ docker compose up -d --build
 
 # View logs
 docker compose logs -f api        # FastAPI logs
-docker compose logs -f ollama     # Ollama logs
-docker compose logs -f db         # Postgres logs
 
 # Stop everything
 docker compose down
@@ -57,40 +53,6 @@ docker compose down -v
 docker compose up --build api
 ```
 
----
-
-## Swapping the LLM model
-
-Edit `docker-compose.yml` — change both `OLLAMA_MODEL` and the pull command:
-
-```yaml
-ollama-pull:
-  entrypoint: >
-    sh -c "ollama pull mistral && echo '✅ Model ready'"   # ← change model here
-
-api:
-  environment:
-    OLLAMA_MODEL: mistral                                   # ← and here
-```
-
-Good alternatives for low-resource machines:
-- `llama3.2` — default, good balance (~2GB)
-- `mistral` — fast, reliable (~4GB)
-- `qwen2.5:3b` — very small, lower quality (~2GB)
-
----
-
-## Connecting a DB client (TablePlus, DBeaver)
-
-Postgres is exposed on `localhost:5432`:
-
-| Field | Value |
-|---|---|
-| Host | localhost |
-| Port | 5432 |
-| User | chakula |
-| Password | chakula_secret |
-| Database | chakula |
 
 ---
 
@@ -173,7 +135,7 @@ GET /foods/verified?region=Uganda North
 ```
 POST /foods/generate (region: "Kisumu")
         ↓
-  LLM generates 10 foods
+  LLM Call generates 10 foods
         ↓
   Saved to Postgres as status=draft
         ↓

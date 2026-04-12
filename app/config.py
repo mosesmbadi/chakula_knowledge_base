@@ -1,8 +1,17 @@
+from urllib.parse import quote
+
+from pydantic import computed_field
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "postgresql+asyncpg://chakula:chakula_secret@db:5432/chakula"
+    POSTGRES_USER: str = "chakula"
+    POSTGRES_PASSWORD: str = "chakula_secret"
+    POSTGRES_DB: str = "chakula"
+    POSTGRES_HOST: str = "db"
+    POSTGRES_PORT: int = 5432
+    PG_POOL_MAX: int = 10
+
     GEMINI_API_KEY: str = ""
     GEMINI_MODEL: str = "gemini-2.5-flash"
     GEMINI_FALLBACK_MODEL: str = "gemini-2.5-flash"
@@ -11,6 +20,17 @@ class Settings(BaseSettings):
     GEMINI_MAX_BACKOFF_SECONDS: float = 8.0
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
     CHAKULA_API_KEY: str = ""
+
+    @computed_field
+    @property
+    def DATABASE_URL(self) -> str:
+        # quote(..., safe="") percent-encodes ALL special chars (e.g. @ → %40, / → %2F)
+        # so passwords like "pass./" are never mis-parsed as part of the URL path.
+        encoded_password = quote(self.POSTGRES_PASSWORD, safe="")
+        return (
+            f"postgresql+asyncpg://{self.POSTGRES_USER}:{encoded_password}"
+            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
+        )
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 
