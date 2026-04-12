@@ -5,10 +5,10 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    POSTGRES_USER: str = "chakula"
-    POSTGRES_PASSWORD: str = "chakula_secret"
-    POSTGRES_DB: str = "chakula"
-    POSTGRES_HOST: str = "db"
+    POSTGRES_USER: str
+    POSTGRES_PASSWORD: str
+    POSTGRES_DB: str
+    POSTGRES_HOST: str
     POSTGRES_PORT: int = 5432
     PG_POOL_MAX: int = 10
 
