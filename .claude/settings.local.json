@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker run --rm --env-file C:/Users/Mbadi/Desktop/Chakula/chakula_deployment/.env mosesmbadi/chakula_knowledge_base:latest python -c ':*)",
+      "Bash(docker run:*)"
+    ]
+  }
+}
