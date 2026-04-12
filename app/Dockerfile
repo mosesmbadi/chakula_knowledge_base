@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
+COPY app/requirements.txt .
 RUN pip install torch==2.4.1 --index-url https://download.pytorch.org/whl/cpu
 RUN pip install -r requirements.txt
 

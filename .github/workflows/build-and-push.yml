@@ -3,11 +3,7 @@ name: Build and Push Docker Image
 on:
   push:
     branches:
-      - main
-      - develop
-  pull_request:
-    branches:
-      - main
+      - dev-moses
 
 jobs:
   build-and-push:
