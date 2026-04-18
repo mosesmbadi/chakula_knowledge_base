@@ -2,7 +2,8 @@ import re
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, cast, or_, and_
+from sqlalchemy import select, func, cast, or_, and_, literal
+from pgvector.sqlalchemy import Vector
 from sqlalchemy.dialects.postgresql import JSONB
 
 from app.db.database import get_db
@@ -274,7 +275,8 @@ async def recommend_foods(payload: RecommendRequest, db: AsyncSession = Depends(
     query_vector = embed_query(query_text)
 
     # Cosine distance (pgvector <=> operator) — lower = more similar
-    similarity_expr = (1 - Food.embedding.cosine_distance(query_vector)).label("similarity")
+    query_vector_cast = cast(query_vector, Vector(384))
+    similarity_expr = (1 - Food.embedding.cosine_distance(query_vector_cast)).label("similarity")
 
     stmt = (
         select(Food, similarity_expr)

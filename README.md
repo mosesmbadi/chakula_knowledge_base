@@ -211,3 +211,5 @@ curl -X POST http://localhost:8000/foods/recommend \
   -H 'Content-Type: application/json' \
   -d '{"region": "Uganda", "budget_per_meal_kes": 10000, "exclude_food_ids": ["affc6a12-53f8-437a-b8a6-3339e342a210"], "limit": 5}'
 ```
+
+
